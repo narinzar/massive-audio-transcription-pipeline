@@ -1,0 +1,20 @@
+# Core transcription pipeline dependencies.
+#
+# torch: install FIRST from the CUDA 12.8 wheel index so GPU inference works on
+# recent NVIDIA cards (e.g. RTX 5090, sm_120). Example:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+# then install the rest of this file normally.
+torch
+
+# Primary Whisper backend (CTranslate2, supports batched GPU inference).
+faster-whisper>=1.0.0
+
+# openai-whisper is an optional fallback backend (select with --backend).
+# Uncomment to enable:
+# openai-whisper>=20231117
+
+numpy>=1.24
+soundfile>=0.12
+tqdm>=4.66
+python-dotenv>=1.0
+pytest>=7.4
