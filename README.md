@@ -78,38 +78,47 @@ Key flags for `01_transcribe.py`: `--workers`, `--model`, `--backend`
 
 ## Results
 
-Numbers below are produced by running the commands above; this repo ships the
-code, run it to populate them.
+Numbers below are from a small-scale run on an RTX 5090 (faster-whisper `base`
+model, 1 worker), read directly from `outputs/stats.json`. On this network the
+original sample URLs (www2.cs.uic.edu) were unreachable (DNS-blocked), so the
+input was real public-domain speech pulled from the Hugging Face LibriSpeech
+dummy dataset via the fallback in `scripts/00_fetch_sample_audio.py`: 73 clips
+concatenated into one 517.5s file plus two short clips (528.2s of audio total
+across 3 files, transcribed in 57.51s of wall time).
 
-Reproduce and observe:
+| Metric | Value | Notes |
+| --- | --- | --- |
+| Aggregate real-time factor | 9.18 | audio-hours per wall-clock-hour; 528.2s audio in 57.51s wall across 3 files. |
+| clip_0.wav | 5.9s audio, RTF 0.12 | first file absorbs the one-time Whisper model load and warmup. |
+| clip_1.wav | 4.8s audio, RTF 29.9 | short clip, model already resident. |
+| librispeech_long.wav | 517.5s audio, 9.05s wall, RTF 57.2 | 18 chunks (30s window); 18 completed, 0 failed, 0 resumed. |
+
+Interpretation (honest read):
+
+- Steady-state throughput is about 57x real-time on the long file. The aggregate
+  9.2x is dragged down by the one-time model-load cost, which is billed entirely
+  to the first short clip (`clip_0.wav`, RTF 0.12). Once the model is resident,
+  the pipeline runs far above realtime.
+- Chunking (30s windows), per-chunk checkpointing, and the diarization merge all
+  ran on the long file: 18 of 18 chunks completed with 0 failed and 0 resumed.
+- The produced transcript is real, for example: "Mr. Quilter is the apostle of
+  the middle classes, and we are glad to welcome his gospel."
+- Resume and retry are exercised by the test suite (`pytest` reports 25 passed)
+  rather than by this clean run: a chunk that hits an intermittent error is
+  retried with growing delays before it is recorded as failed, and a re-run
+  skips chunks already marked done, reporting `resumed_chunks` greater than 0.
+
+To reproduce and compare serial vs parallel throughput on your own data:
 
 ```
-# baseline (serial) vs parallel throughput on the same data:
 python scripts/01_transcribe.py --workers 1
 python scripts/01_transcribe.py --workers 4
 # compare real_time_factor in outputs/stats.json between the two runs.
 ```
 
-| Metric | Where | Expected behavior |
-| --- | --- | --- |
-| real_time_factor | outputs/stats.json | TBD (run). Above 1 on GPU means faster than realtime. |
-| workers 1 vs 4 | outputs/stats.json | TBD (run). RTF should rise with workers up to the core count, then plateau. |
-| resume after crash | console + checkpoints/ | TBD (run). A re-run resumes; completed chunks are skipped. |
-
-Expected qualitative behavior:
-
-- Real-time factor above 1 on a GPU means the pipeline transcribes faster than
-  realtime (more than one audio hour per wall-clock hour).
-- Throughput should increase with `--workers` up to the number of physical CPU
-  cores (or GPU saturation) and then plateau; past that, added workers contend
-  for the same device.
-- Checkpointing makes a re-run resume rather than restart. Interrupt a run with
-  Ctrl-C partway through, then run the same command again: it skips completed
-  chunks and processes only the remainder. `stats.json` reports `resumed_chunks`
-  greater than 0 on the second run.
-- Retry/backoff absorbs transient failures: a chunk that hits an intermittent
-  error is retried with growing delays before it is recorded as failed. Failed
-  chunks are re-attempted on the next run.
+Throughput should increase with `--workers` up to the number of physical CPU
+cores (or GPU saturation) and then plateau; past that, added workers contend for
+the same device.
 
 ## What I'd do next at larger scale
 

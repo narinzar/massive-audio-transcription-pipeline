@@ -15,6 +15,10 @@ faster-whisper>=1.0.0
 
 numpy>=1.24
 soundfile>=0.12
+
+# Used only by the Hugging Face LibriSpeech fallback in
+# scripts/00_fetch_sample_audio.py (when the direct sample URLs are unreachable).
+datasets>=2.14
 tqdm>=4.66
 python-dotenv>=1.0
 pytest>=7.4
